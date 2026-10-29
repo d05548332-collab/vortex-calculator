@@ -66,17 +66,19 @@ async def inline_lang_menu(callback_query: types.CallbackQuery):
 @dp.callback_query(lambda c: c.data.startswith("set_lang_"))
 async def set_user_language(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    new_lang = callback_query.data.split("_")[2]
-    USER_LANGUAGES[user_id] = new_lang
+    # Исправлено: берем точное значение из конца строки ('en' или 'ru')
+    chosen_lang = "en" if "en" in callback_query.data else "ru"
+    USER_LANGUAGES[user_id] = chosen_lang
+    
     await callback_query.answer("Language updated! / Язык обновлен!")
     
-    # Сразу перерисовываем меню выбора языка, но уже с новыми языковыми настройками кнопки Назад
+    # Перерисовываем меню с новым выбранным языком
     builder = InlineKeyboardBuilder()
     builder.add(types.InlineKeyboardButton(text="🇺🇸 English", callback_data="set_lang_en"))
     builder.add(types.InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang_ru"))
-    builder.add(types.InlineKeyboardButton(text=STRINGS[new_lang]["btn_back"], callback_data="go_to_menu"))
+    builder.add(types.InlineKeyboardButton(text=STRINGS[chosen_lang]["btn_back"], callback_data="go_to_menu"))
     builder.adjust(2, 1)
-    await callback_query.message.edit_text(STRINGS[new_lang]["lang_select"], reply_markup=builder.as_markup())
+    await callback_query.message.edit_text(STRINGS[chosen_lang]["lang_select"], reply_markup=builder.as_markup())
 
 @dp.callback_query(lambda c: c.data == "mod_trading")
 async def inline_trading(callback_query: types.CallbackQuery):
