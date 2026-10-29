@@ -18,7 +18,7 @@ USER_LANGUAGES = {}
 
 STRINGS = {
     "en": {
-        "welcome": "⚡ **VORTEX INTERACTIVE TERMINAL v1.0** ⚡\n\n`System: Operational`\n`Network: Multilingual Node`\n\n🟢 **LIVE MARKET DATA:**\n• **BTC / USD:** `${btc_price}` 🟢\n\nSelect a professional analytical module from the dashboard below:",
+        "welcome": "⚡ **VORTEX INTERACTIVE TERMINAL v1.0** ⚡\n\n`System: Operational`\n`Network: Multilingual Node`\n\n🟢 **LIVE MARKET DATA:**\n• **BTC / USD:** USD {btc_price} 🟢\n\nSelect a professional analytical module from the dashboard below:",
         "btn_trading": "📈 Trading PnL & Risk",
         "btn_dca": "📊 DCA Strategy Calc",
         "btn_ton": "💎 TON Swap & Gas",
@@ -30,7 +30,7 @@ STRINGS = {
         "trading_intro": "📊 **TRADING PnL & LEVERAGE ENGINE**\n\nEnter values in the exact format:\n`Entry_Price Exit_Price Leverage`\n\n*Example:* `2.5 3.0 10`"
     },
     "ru": {
-        "welcome": "⚡ **ИНТЕРАКТИВНЫЙ ТЕРМИНАЛ VORTEX v1.0** ⚡\n\n`Система: Работает`\n`Сеть: Мультиязычный Узел`\n\n🟢 **РЫНОЧНЫЙ КУРС В РЕАЛЬНОМ ВРЕМЕНИ:**\n• **BTC / USD:** `${btc_price}` 🟢\n\nВыберите профессиональный аналитический модуль на панели:",
+        "welcome": "⚡ **ИНТЕРАКТИВНЫЙ ТЕРМИНАЛ VORTEX v1.0** ⚡\n\n`Система: Работает`\n`Сеть: Мультиязычный Узел`\n\n🟢 **РЫНОЧНЫЙ КУРС В РЕАЛЬНОМ ВРЕМЕНИ:**\n• **BTC / USD:** USD {btc_price} 🟢\n\nВыберите профессиональный аналитический модуль на панели:",
         "btn_trading": "📈 Трейдинг PnL и Риски",
         "btn_dca": "📊 Стратегия усреднения DCA",
         "btn_ton": "💎 TON Обмен и Газ",
@@ -43,7 +43,6 @@ STRINGS = {
     }
 }
 
-# Функция для безопасного получения курса BTC в реальном времени
 def fetch_btc_price():
     try:
         url = "https://coingecko.com"
@@ -54,7 +53,7 @@ def fetch_btc_price():
             return f"{price:,}"
     except Exception as e:
         logger.error(f"Error fetching BTC price: {e}")
-        return "80,715" # Запасной статичный курс на случай сбоя сети
+        return "79,966"
 
 def get_lang(user_id, message_lang=None):
     if user_id not in USER_LANGUAGES:
@@ -97,7 +96,7 @@ async def set_user_language(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     chosen_lang = "en" if "en" in callback_query.data else "ru"
     USER_LANGUAGES[user_id] = chosen_lang
-    await callback_query.answer("Terminal configuration updated!")
+    await callback_query.answer("Terminal rebooted!")
     
     builder = InlineKeyboardBuilder()
     builder.add(types.InlineKeyboardButton(text="🇺🇸 English", callback_data="set_lang_en"))
@@ -112,13 +111,13 @@ async def inline_trading(callback_query: types.CallbackQuery):
     lang = get_lang(user_id)
     builder = InlineKeyboardBuilder()
     builder.add(types.InlineKeyboardButton(text=STRINGS[lang]["btn_back"], callback_data="go_to_menu"))
-    await callback_query.message.edit_text(STRINGS[lang]["trading_intro"], parse_mode="Markdown", reply_markup=build_menu(user_id))
+    await callback_query.message.edit_text(STRINGS[lang]["trading_intro"], parse_mode="Markdown", reply_markup=builder.as_markup())
 
 @dp.callback_query(lambda c: c.data == "mod_coming")
 async def inline_coming_soon(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     lang = get_lang(user_id)
-    alert_txt = "🛠️ Module under calibration. Will be unlocked in Phase 1." if lang == "en" else "🛠️ Модуль калибруется. Будет доступен в Фазе 1."
+    alert_txt = "🛠️ Module under calibration. Unlocks in Phase 1." if lang == "en" else "🛠️ Модуль калибруется. Доступен в Фазе 1."
     await callback_query.answer(text=alert_txt, show_alert=True)
 
 @dp.callback_query(lambda c: c.data == "go_to_menu")
