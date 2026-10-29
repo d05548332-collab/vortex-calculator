@@ -6,6 +6,7 @@ import json
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramBadRequest
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -14,11 +15,13 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# Глобальное хранилище состояний сессий
 USER_LANGUAGES = {}
+USER_STATES = {}
 
 STRINGS = {
     "en": {
-        "welcome": "⚡ **VORTEX INTERACTIVE TERMINAL v1.0** ⚡\n\n`System: Operational`\n`Network: Multilingual Node`\n\n🟢 **LIVE MARKET DATA:**\n• **BTC / USD:** USD {btc_price} 🟢\n\nSelect a professional analytical module from the dashboard below:",
+        "welcome": "⚡ **VORTEX INTERACTIVE TERMINAL v1.0** ⚡\n\n`System: Operational`\n`Core: Multilingual Async Node`\n\n🟢 **LIVE MARKET DATA:**\n• **BTC / USD:** USD {btc_price} 🟢\n\nSelect a professional analytical module from the dashboard:",
         "btn_trading": "📈 Trading PnL & Risk",
         "btn_dca": "📊 DCA Strategy Calc",
         "btn_ton": "💎 TON Swap & Gas",
@@ -30,7 +33,7 @@ STRINGS = {
         "trading_intro": "📊 **TRADING PnL & LEVERAGE ENGINE**\n\nEnter values in the exact format:\n`Entry_Price Exit_Price Leverage`\n\n*Example:* `2.5 3.0 10`"
     },
     "ru": {
-        "welcome": "⚡ **ИНТЕРАКТИВНЫЙ ТЕРМИНАЛ VORTEX v1.0** ⚡\n\n`Система: Работает`\n`Сеть: Мультиязычный Узел`\n\n🟢 **РЫНОЧНЫЙ КУРС В РЕАЛЬНОМ ВРЕМЕНИ:**\n• **BTC / USD:** USD {btc_price} 🟢\n\nВыберите профессиональный аналитический модуль на панели:",
+        "welcome": "⚡ **ИНТЕРАКТИВНЫЙ ТЕРМИНАЛ VORTEX v1.0** ⚡\n\n`Система: Работает`\n`Ядро: Мультиязычный Асинхронный Узел`\n\n🟢 **РЫНОЧНЫЙ КУРС В РЕАЛЬНОМ ВРЕМЕНИ:**\n• **BTC / USD:** USD {btc_price} 🟢\n\nВыберите профессиональный аналитический модуль на панели:",
         "btn_trading": "📈 Трейдинг PnL и Риски",
         "btn_dca": "📊 Стратегия усреднения DCA",
         "btn_ton": "💎 TON Обмен и Газ",
@@ -46,14 +49,13 @@ STRINGS = {
 def fetch_btc_price():
     try:
         url = "https://coingecko.com"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        with urllib.request.urlopen(req, timeout=4) as response:
             data = json.loads(response.read().decode())
-            price = data["bitcoin"]["usd"]
-            return f"{price:,}"
+            return f"{data['bitcoin']['usd']:,}"
     except Exception as e:
-        logger.error(f"Error fetching BTC price: {e}")
-        return "79,966"
+        logger.error(f"Crypto API Error: {e}")
+        return "79,840"
 
 def get_lang(user_id, message_lang=None):
     if user_id not in USER_LANGUAGES:
@@ -75,6 +77,7 @@ def build_menu(user_id, message_lang=None):
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
+    USER_STATES[user_id] = "menu"
     lang = get_lang(user_id, message.from_user.language_code)
     btc = fetch_btc_price()
     welcome_text = STRINGS[lang]["welcome"].replace("{btc_price}", btc)
@@ -89,29 +92,42 @@ async def inline_lang_menu(callback_query: types.CallbackQuery):
     builder.add(types.InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang_ru"))
     builder.add(types.InlineKeyboardButton(text=STRINGS[lang]["btn_back"], callback_data="go_to_menu"))
     builder.adjust(2, 1)
-    await callback_query.message.edit_text(STRINGS[lang]["lang_select"], reply_markup=builder.as_markup())
+    try:
+        await callback_query.message.edit_text(STRINGS[lang]["lang_select"], reply_markup=builder.as_markup(), parse_mode="Markdown")
+    except TelegramBadRequest:
+        pass
+    await callback_query.answer()
 
 @dp.callback_query(lambda c: c.data.startswith("set_lang_"))
 async def set_user_language(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     chosen_lang = "en" if "en" in callback_query.data else "ru"
     USER_LANGUAGES[user_id] = chosen_lang
-    await callback_query.answer("Terminal rebooted!")
     
     builder = InlineKeyboardBuilder()
     builder.add(types.InlineKeyboardButton(text="🇺🇸 English", callback_data="set_lang_en"))
     builder.add(types.InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang_ru"))
     builder.add(types.InlineKeyboardButton(text=STRINGS[chosen_lang]["btn_back"], callback_data="go_to_menu"))
     builder.adjust(2, 1)
-    await callback_query.message.edit_text(STRINGS[chosen_lang]["lang_select"], reply_markup=builder.as_markup())
+    
+    try:
+        await callback_query.message.edit_text(STRINGS[chosen_lang]["lang_select"], reply_markup=builder.as_markup(), parse_mode="Markdown")
+    except TelegramBadRequest:
+        pass
+    await callback_query.answer(text="Terminal reconfigured!" if chosen_lang == "en" else "Терминал перенастроен!")
 
 @dp.callback_query(lambda c: c.data == "mod_trading")
 async def inline_trading(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
+    USER_STATES[user_id] = "input_trading"
     lang = get_lang(user_id)
     builder = InlineKeyboardBuilder()
     builder.add(types.InlineKeyboardButton(text=STRINGS[lang]["btn_back"], callback_data="go_to_menu"))
-    await callback_query.message.edit_text(STRINGS[lang]["trading_intro"], parse_mode="Markdown", reply_markup=builder.as_markup())
+    try:
+        await callback_query.message.edit_text(STRINGS[lang]["trading_intro"], parse_mode="Markdown", reply_markup=builder.as_markup())
+    except TelegramBadRequest:
+        pass
+    await callback_query.answer()
 
 @dp.callback_query(lambda c: c.data == "mod_coming")
 async def inline_coming_soon(callback_query: types.CallbackQuery):
@@ -123,45 +139,59 @@ async def inline_coming_soon(callback_query: types.CallbackQuery):
 @dp.callback_query(lambda c: c.data == "go_to_menu")
 async def inline_go_to_menu(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
+    USER_STATES[user_id] = "menu"
     lang = get_lang(user_id)
     btc = fetch_btc_price()
     welcome_text = STRINGS[lang]["welcome"].replace("{btc_price}", btc)
-    await callback_query.message.edit_text(welcome_text, parse_mode="Markdown", reply_markup=build_menu(user_id))
+    try:
+        await callback_query.message.edit_text(welcome_text, parse_mode="Markdown", reply_markup=build_menu(user_id))
+    except TelegramBadRequest:
+        pass
+    await callback_query.answer()
 
 @dp.message()
 async def process_calculations(message: types.Message):
     user_id = message.from_user.id
     lang = get_lang(user_id)
-    try:
-        parts = message.text.replace(",", ".").split()
-        if len(parts) == 3:
-            entry = float(parts[0])
-            exit_price = float(parts[1])
-            leverage = float(parts[2])
-            
-            pnl_percent = ((exit_price - entry) / entry) * 100 * leverage
-            liq_price = entry * (1 - 1 / leverage)
+    current_state = USER_STATES.get(user_id, "menu")
+    
+    if current_state == "input_trading":
+        try:
+            parts = message.text.replace(",", ".").split()
+            if len(parts) == 3:
+                entry = float(parts[0])
+                exit_price = float(parts[1])
+                leverage = float(parts[2])
+                
+                pnl_percent = ((exit_price - entry) / entry) * 100 * leverage
+                liq_price = entry * (1 - 1 / leverage)
 
-            if lang == "ru":
-                res = (
-                    f"🟩 **АНАЛИТИЧЕСКИЙ ОТЧЕТ VORTEX:**\n\n"
-                    f"• **Чистый PnL:** `{pnl_percent:.2f}%`\n"
-                    f"• **Цена ликвидации (Long):** `{liq_price:.4f}`\n\n"
-                    f"`Статус операции: Успешно`"
-                )
+                if lang == "ru":
+                    res = (
+                        f"🟩 **АНАЛИТИЧЕСКИЙ ОТЧЕТ VORTEX:**\n\n"
+                        f"• **Чистый PnL:** `{pnl_percent:.2f}%`\n"
+                        f"• **Цена ликвидации (Long):** `{liq_price:.4f}`\n\n"
+                        f"`Статус операции: Успешно`"
+                    )
+                else:
+                    res = (
+                        f"🟩 **VORTEX ANALYTICAL REPORT:**\n\n"
+                        f"• **Net PnL:** `{pnl_percent:.2f}%`\n"
+                        f"• **Liquidation Price (Long):** `{liq_price:.4f}`\n\n"
+                        f"`Operation Status: Success`"
+                    )
+                USER_STATES[user_id] = "menu"
+                await message.answer(res, parse_mode="Markdown", reply_markup=build_menu(user_id))
             else:
-                res = (
-                    f"🟩 **VORTEX ANALYTICAL REPORT:**\n\n"
-                    f"• **Net PnL:** `{pnl_percent:.2f}%`\n"
-                    f"• **Liquidation Price (Long):** `{liq_price:.4f}`\n\n"
-                    f"`Operation Status: Success`"
-                )
-            await message.answer(res, parse_mode="Markdown", reply_markup=build_menu(user_id))
-        else:
-            raise ValueError
-    except Exception:
-        err = "❌ Invalid data format. Enter 3 variables." if lang == "en" else "❌ Ошибка формата. Введите 3 числа через пробел."
-        await message.answer(err, reply_markup=build_menu(user_id))
+                raise ValueError
+        except Exception:
+            err = "❌ Invalid data format. Enter 3 variables." if lang == "en" else "❌ Ошибка формата. Введите 3 числа через пробел."
+            await message.answer(err, reply_markup=build_menu(user_id))
+    else:
+        # Если пользователь пишет текст вне режима калькулятора, плавно возвращаем его в дашборд
+        btc = fetch_btc_price()
+        welcome_text = STRINGS[lang]["welcome"].replace("{btc_price}", btc)
+        await message.answer(welcome_text, parse_mode="Markdown", reply_markup=build_menu(user_id))
 
 async def main():
     logger.info("VORTEX Terminal Engine is online...")
